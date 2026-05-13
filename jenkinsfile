@@ -8,6 +8,7 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = 'bindusravya/bms:latest'
     }
 
     stages {
@@ -64,7 +65,7 @@ pipeline {
                         echo $PASS | docker login -u $USER --password-stdin
 
                         echo "Building Docker image..."
-                        docker build -t $DOCKER_IMAGE -f bookmyshow-app/Dockerfile bookmyshow-app
+                        docker build -t $DOCKER_IMAGE -f bookmyshow-app/Dockerfile .
 
                         echo "Pushing Docker image..."
                         docker push $DOCKER_IMAGE
