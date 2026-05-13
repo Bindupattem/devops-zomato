@@ -43,60 +43,57 @@ pipeline {
                 sh "trivy fs . > trivy.txt"
             }
         }
-        stage ("Build Docker Image") {
-            steps {
-                sh "docker build -t zomato ."
-            }
-        }
-        stage ("Tag & Push to DockerHub") {
+       stage('Docker Build & Push') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker') {
-                        sh "docker tag zomato kastrov/zomato:latest "
-                        sh "docker push kastrov/zomato:latest "
+                    withCredentials([usernamePassword(credentialsId: 'docker', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        sh '''
+                        echo "Logging into DockerHub..."
+                        echo $PASS | docker login -u $USER --password-stdin
+
+                        echo "Building Docker image..."
+                        docker build -t $DOCKER_IMAGE -f bookmyshow-app/Dockerfile bookmyshow-app
+
+                        echo "Pushing Docker image..."
+                        docker push $DOCKER_IMAGE
+                        '''
                     }
                 }
             }
         }
-        stage('Docker Scout Image') {
+       stage('Deploy to Container') {
             steps {
-                script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
-                       sh 'docker-scout quickview kastrov/zomato:latest'
-                       sh 'docker-scout cves kastrov/zomato:latest'
-                       sh 'docker-scout recommendations kastrov/zomato:latest'
-                   }
-                }
+                sh ''' 
+                echo "Freeing port 3000..."
+                docker ps -q --filter "publish=3000" | xargs -r docker stop
+                docker ps -aq --filter "publish=3000" | xargs -r docker rm
+
+                echo "Stopping and removing old container..."
+                docker stop bms || true
+                docker rm bms || true
+
+                echo "Running new container on port 3000..."
+                docker run -d --restart=always --name bms -p 3000:3000 bindusravya/bms:latest
+
+                echo "Checking running containers..."
+                docker ps -a
+
+                echo "Fetching logs..."
+                sleep 5
+                docker logs bms
+                '''
             }
         }
-        stage ("Deploy to Container") {
-            steps {
-                sh 'docker run -d --name zomato -p 3000:3000 kastrov/zomato:latest'
-            }
-        }
-    }
+
+    }   // <-- THIS WAS MISSING
+
     post {
-    always {
-        emailext attachLog: true,
-            subject: "'${currentBuild.result}'",
-            body: """
-                <html>
-                <body>
-                    <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
-                    </div>
-                    <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
-                    </div>
-                    <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">URL: ${env.BUILD_URL}</p>
-                    </div>
-                </body>
-                </html>
-            """,
-            to: 'kastrokiran@gmail.com',
-            mimeType: 'text/html',
-            attachmentsPattern: 'trivy.txt'
+        always {
+            emailext attachLog: true,
+                subject: "${currentBuild.result}",
+                body: "Project: ${env.JOB_NAME}<br/>Build: ${env.BUILD_NUMBER}<br/>URL: ${env.BUILD_URL}",
+                to: 'kastrokiran@gmail.com',
+                attachmentsPattern: 'trivyfs.txt'
         }
     }
 }
