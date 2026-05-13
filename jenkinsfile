@@ -65,7 +65,7 @@ pipeline {
                         echo $PASS | docker login -u $USER --password-stdin
 
                         echo "Building Docker image..."
-                        docker build -t $DOCKER_IMAGE -f devops-zomato/Dockerfile .
+                        docker build -t $DOCKER_IMAGE -f Dockerfile .
 
                         echo "Pushing Docker image..."
                         docker push $DOCKER_IMAGE
@@ -87,7 +87,7 @@ pipeline {
                 docker rm bms || true
 
                 echo "Running new container on port 4000..."
-                docker run -d --restart=always --name bms -p 4000:3000 bindusravya/devops-zomato:latest
+                docker run -d --restart=always --name bms -p 4000:3000 $DOCKER_IMAGE
 
                 echo "Checking running containers..."
                 docker ps -a
@@ -106,7 +106,7 @@ pipeline {
                 subject: "${currentBuild.result}",
                 body: "Project: ${env.JOB_NAME}<br/>Build: ${env.BUILD_NUMBER}<br/>URL: ${env.BUILD_URL}",
                 to: 'kastrokiran@gmail.com',
-                attachmentsPattern: 'trivyfs.txt'
+                attachmentsPattern: 'trivy.txt'
         }
     }
 }
